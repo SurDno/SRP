@@ -7,6 +7,7 @@ function actor_init(npc)
 end
 
 task_update = false
+quitting_game = false
 delayed_alife_release_objects = {}
 -- to_delayed_alife_release_objects = {}
 
@@ -18,20 +19,20 @@ local game_difficulty_by_num =
 	[3] = "gd_master"
 }
 
-local clsid_wpn_ammo = clsid.wpn_ammo
-local clsid_equ_stalker_s = clsid.equ_stalker_s
-local object_binder_update = object_binder.update
-local tm = nil
-local actor = nil
-local weather_manager = nil
-local last_level_name = nil
-local next_update_time = nil
-local quitting_game = false
-local first_update_done = false
-local weapon_needs_hiding = false
-local weapon_hidden = false
+local clsid_wpn_ammo            = clsid.wpn_ammo
+local object_binder_update      = object_binder.update
+local xr_sound_update           = xr_sound.update
+local dyn_music_update          = xrs_dyn_music.on_actor_update
+local dunin_ammo_on_update      = nil
+local tm                        = nil
+local actor                     = nil
+local weather_manager           = nil
+local last_level_name           = nil
+local next_update_time          = nil
+local first_update_done         = false
+local weapon_needs_hiding       = false
+local weapon_hidden             = false
 local zones_needing_weapon_hide = 0
-
 ----------------------------------------------------------------------------------------------------------------------
 class "actor_binder" (object_binder)
 ----------------------------------------------------------------------------------------------------------------------
@@ -75,6 +76,8 @@ function actor_binder:net_spawn(data)
 	end
 
 	db.add_actor(actor)
+
+	dunin_ammo_on_update = dunin_ammo.on_update -- SRP
 
 	if self.st.disable_input_time == nil then
 		level.enable_input()
@@ -200,14 +203,15 @@ function actor_binder:on_item_take(obj)
 			end
 		end
 	end
-	local obj_clsid = obj:clsid()
-	if obj_clsid == clsid_wpn_ammo then
+	if obj:clsid() == clsid_wpn_ammo then
 		dunin_ammo.on_take(obj)
-	elseif obj_clsid == clsid_equ_stalker_s then -- per NatVac: hack to undo reversion to default rookie jacket player model on picking up new armor
-		local actor_outfit = actor:item_in_slot(6)
+--[[
+	elseif obj:clsid() == clsid.equ_stalker_s then -- per NatVac: hack to undo reversion to default rookie jacket player model on picking up new armor
+		local actor_outfit = actor:item_in_slot(6) -- update: can't use this, introduces bug where picking up new armor unequips equipped artifacts
 		if actor_outfit and obj:id() ~= actor_outfit:id() then
 			actor:transfer_item(actor_outfit, actor)
 		end
+]]
 	end
 end
 ----------------------------------------------------------------------------------------------------------------------
@@ -331,7 +335,7 @@ function actor_binder:update(delta)
 
 	game_stats.update(delta, actor)
 ]]
-	xr_sound.update(0) -- actor ID is hard-coded to 0 in-engine
+	xr_sound_update(0) -- actor ID is hard-coded to 0 in-engine
 --[[
 	if self.st.sleep_relocate_time ~= nil then
 		if game.get_game_time():diffSec(self.st.sleep_relocate_time) >= self.st.sleep_relocate_idle then
@@ -354,7 +358,7 @@ function actor_binder:update(delta)
 		end
 	end
 
-	dunin_ammo.on_update()
+	dunin_ammo_on_update()
 
 	local time = time_global()
 
@@ -407,6 +411,7 @@ function actor_binder:update(delta)
 			end
 
 			local hide_phase = xr_surge_hide.phase
+
 			if diff_sec >= time_before_lag_noosphere and hide_phase == 1 then
 				xr_surge_hide.activate_surge()
 			elseif diff_sec >= time_before_give_task and hide_phase == 2 then
@@ -474,6 +479,7 @@ function actor_binder:update(delta)
 	end
 --[[
 	local play_combat = xrs_dyn_music.play_combat
+
 	if play_combat == 0 then
 		xrs_dyn_music.interactive_music(0)
 	elseif play_combat == 1 then
@@ -481,8 +487,10 @@ function actor_binder:update(delta)
 	elseif play_combat == 2 then
 		xrs_dyn_music.interactive_music(10)
 	end
-]]
+
 	xr_s.on_actor_update(delta)
+]]
+	dyn_music_update()
 
 	if guiders.teleported_to_another_level then
 		if not guiders.level_changed then

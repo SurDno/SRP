@@ -368,7 +368,7 @@ function CGeneralTask:init_reward()
 			is_reward = true
 		end
 	else
-		local npc = inventory_upgrades.victim
+--		local npc = inventory_upgrades.victim
 
 		if money ~= nil then
 
@@ -376,7 +376,7 @@ function CGeneralTask:init_reward()
 				abort("[task_objects.CGeneralTask:init_reward]: init_reward:task_id = "..tostring(self.id))
 			end
 
-			dialogs.relocate_money(npc, tonumber(money), "in")
+			dialogs.relocate_money(nil, tonumber(money), "in")
 		end
 
 		if items ~= nil then
@@ -392,7 +392,7 @@ function CGeneralTask:init_reward()
 			end
 
 			for k, v in pairs (ancillary_item_table) do
-				dialogs.relocate_item_section(npc, k, "in", v)
+				dialogs.relocate_item_section(nil, k, "in", v)
 			end
 		end
 	end
@@ -646,18 +646,11 @@ function CEliminateSmartTask:deactivate_task(_task) -- called 7th
 	end
 
 	local faction = self.faction
-	if faction ~= nil then
-		if faction.random_tasks ~= nil then
-			faction.random_tasks[self.target] = nil
-		end
-	end
 ]]
 	local faction = self.board.players[self.community]
 	if faction ~= nil then
 		if faction.random_tasks ~= nil then
-			if faction.random_tasks[self.target] ~= nil then
-				faction.random_tasks[self.target] = nil
-			end
+			faction.random_tasks[self.target] = nil
 		end
 	end
 end
@@ -765,7 +758,7 @@ function CCaptureSmartTask:check_target(smart, faction) -- called 1st (not on lo
 end
 
 function CCaptureSmartTask:get_inited_task(smart, faction, entity_id) -- called 2nd (not on load)
-	local task = CCaptureSmartTask(self.task_ini, self.base_id , self.type) -- calls CGeneralTask:__init() and CCaptureSmartTask:__init()
+	local task = CCaptureSmartTask(self.task_ini, self.base_id, self.type) -- calls CGeneralTask:__init() and CCaptureSmartTask:__init()
 	task:init_task(smart, faction)
 	task.entity_id = entity_id
 	return task
@@ -1007,9 +1000,7 @@ function CCaptureSmartTask:deactivate_task(_task) -- called 7th
 	local faction = self.board.players[self.community]
 	if faction ~= nil then
 		if faction.random_tasks ~= nil then
-			if faction.random_tasks[self.target] ~= nil then
-				faction.random_tasks[self.target] = nil
-			end
+			faction.random_tasks[self.target] = nil
 		end
 	end
 end
@@ -1974,7 +1965,7 @@ function CBringItemTask:init_task(squad_id) -- called 4th (not on load)
 --	self.npc = nil
 --	self.tmp_counter = 0
 	self.state = "started"
-	-- db.actor:iterate_inventory(set_inventory_item_count, self) -- iterate on give task
+	-- db.actor:iterate_inventory(set_inventory_item_count, self.requested_items) -- iterate on give task
 	self:set_task_text_for_bring_item()
 end
 
@@ -2017,9 +2008,8 @@ function CBringItemTask:set_task_text_for_bring_item()
 	self.text = s
 end
 
-local function set_inventory_item_count(task, item)
+local function set_inventory_item_count(requested_items, item)
 	local sect = item:section()
-	local requested_items = task.requested_items
 	for item_name in pairs (requested_items) do
 		if item_name == sect then
 			local cnt_table = requested_items[item_name]
@@ -2037,7 +2027,7 @@ function CBringItemTask:give_task(community) -- called 5th (not on load)
 --		squad.bring_item_inited_time = self.inited_time
 --	end
 	self.squad.bring_item_inited_time = self.inited_time -- self.squad set by task_dialogs.give_squad_capture_task()
-	db.actor:iterate_inventory(set_inventory_item_count, self)
+	db.actor:iterate_inventory(set_inventory_item_count, self.requested_items)
 end
 
 function CBringItemTask:check_task(tm) -- called 6th
@@ -2131,7 +2121,7 @@ function CBringItemTask:on_item_take(item)
 	if cnt_table then
 		cnt_table.num = cnt_table.num + 1
 	end
---	db.actor:iterate_inventory(set_inventory_item_count, self)
+--	db.actor:iterate_inventory(set_inventory_item_count, self.requested_items)
 	self:set_task_text_for_bring_item()
 end
 
@@ -2140,12 +2130,12 @@ function CBringItemTask:on_item_drop(item)
 	if cnt_table then
 		cnt_table.num = cnt_table.num - 1
 	end
---	db.actor:iterate_inventory(set_inventory_item_count, self)
+--	db.actor:iterate_inventory(set_inventory_item_count, self.requested_items)
 	self:set_task_text_for_bring_item()
 end
 
 function CBringItemTask:on_load(actor)
-	actor:iterate_inventory(set_inventory_item_count, self)
+	actor:iterate_inventory(set_inventory_item_count, self.requested_items)
 end
 
 local function transfer_non_slotted_items(task, item)
@@ -2356,7 +2346,10 @@ function CRecoverItemTask:spawn_recoveritem()
 	local target_npc_or_box = sim:object(self.target_npc_or_box_table[index])
 	if target_npc_or_box then
 		local container_id = target_npc_or_box.id
-		self.target_obj_id = sim:create(self.requested_item, vector(), 0, 0, container_id).id
+		local container_pos = target_npc_or_box.position
+		local container_lvx = target_npc_or_box.m_level_vertex_id
+		local container_gvx = target_npc_or_box.m_game_vertex_id
+		self.target_obj_id = sim:create(self.requested_item, container_pos, container_lvx, container_gvx, container_id).id
 		self.target = container_id
 	else
 		abort("[task_objects.CRecoverItemTask:spawn_recoveritem]: There is no such target npc or box: '%s'.", tostring(self.target_npc_or_box_table[index]))
@@ -2698,7 +2691,7 @@ function CHideFromSurgeTask:check_task(tm)
 			xr_surge_hide.start_surge = false
 			local sr = db.storage[self.target]
 			if not(sr and sr.object:inside(act_pos)) then
-				xr_effects.disable_ui(nil, nil)
+				xr_effects.disable_ui(act)
 				level.add_pp_effector("mar_surge.ppe", 200211, false)
 			end
 			self:kill_unhided_npc()
@@ -2713,12 +2706,12 @@ function CHideFromSurgeTask:check_task(tm)
 					xr_sound.stop_sound_looped(0) -- 0 = actor ID
 					end_surge("reversed")
 				else
-					xr_effects.kill_actor()
+					act:kill(act)
 					end_surge("fail")
 				end
 			end
 		elseif(_delta>=35000) then
-			xr_effects.enable_ui(nil, nil)
+			xr_effects.enable_ui()
 			level.remove_pp_effector(200208)
 			xr_sound.stop_sound_looped(0) -- 0 = actor ID
 			end_surge("complete")
